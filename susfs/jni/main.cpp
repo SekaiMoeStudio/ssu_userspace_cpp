@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include <sys/prctl.h>
-#include <iostream>
-#include <string>
+#include <stdio.h>
+#include <string.h>
 
 namespace ksu {
     enum : uint32_t {
@@ -51,7 +51,7 @@ struct KernelSuManager {
         int error = -1;
         prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SUS_SU), &info, nullptr, &error);
         if (!error) {
-            std::cout << "[+] sus_su mode " << target_working_mode << " is enabled\n";
+            printf("[+] sus_su mode %d is enabled\n", target_working_mode);
         }
         return error == 0;
     }
@@ -59,7 +59,7 @@ struct KernelSuManager {
     static void print_features(unsigned long enabled_features) {
         struct FeatureConfig {
             ksu::Feature feature;
-            std::string name;
+            const char* name;
         };
 
         static const FeatureConfig configs[] = {
@@ -81,7 +81,7 @@ struct KernelSuManager {
 
         for (const auto& config : configs) {
             if (is_feature_enabled(enabled_features, config.feature)) {
-                std::cout << config.name << '\n';
+                printf("%s\n", config.name);
             }
         }
     }
@@ -99,86 +99,83 @@ struct KernelSuManager {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <support|version|variant|features|sus_su <0|2|mode>>\n";
+        fprintf(stderr, "Usage: %s <support|version|variant|features|sus_su <0|2|mode>>\n", argv[0]);
         return 1;
     }
 
-    std::string command(argv[1]);
     int error = -1;
 
-    if (command == "version") {
-        std::string version(16, '\0');
-        prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_VERSION), version.data(), nullptr, &error);
-        std::cout << (error ? "Invalid" : version) << '\n';
+    if (strcmp(argv[1], "version") == 0) {
+        char version[16] = {0};
+        prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_VERSION), version, nullptr, &error);
+        printf("%s\n", error ? "Invalid" : version);
     } 
-    else if (command == "variant") {
-        std::string variant(16, '\0');
-        prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_VARIANT), variant.data(), nullptr, &error);
-        std::cout << (error ? "Invalid" : variant) << '\n';
+    else if (strcmp(argv[1], "variant") == 0) {
+        char variant[16] = {0};
+        prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_VARIANT), variant, nullptr, &error);
+        printf("%s\n", error ? "Invalid" : variant);
     }
-    else if (command == "features") {
+    else if (strcmp(argv[1], "features") == 0) {
         unsigned long enabled_features;
         prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_ENABLED_FEATURES), &enabled_features, nullptr, &error);
         if (!error) {
             KernelSuManager::print_features(enabled_features);
         } else {
-            std::cout << "Invalid\n";
+            printf("Invalid\n");
         }
     }
-    else if (command == "support") {
+    else if (strcmp(argv[1], "support") == 0) {
         unsigned long enabled_features;
         prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::SHOW_ENABLED_FEATURES), &enabled_features, nullptr, &error);
-        std::cout << (error || !enabled_features ? "Unsupported" : "Supported") << '\n';
+        printf("%s\n", error || !enabled_features ? "Unsupported" : "Supported");
     }
-    else if (argc == 3 && command == "sus_su") {
-        std::string mode_arg(argv[2]);
+
+   else if (argc == 3 && strcmp(argv[1], "sus_su") == 0) {
         int last_working_mode;
-        
         if (!KernelSuManager::get_sus_su_working_mode(&last_working_mode)) {
             return 1;
         }
 
-        if (mode_arg == "mode") {
-            std::cout << last_working_mode << '\n';
+        if (strcmp(argv[2], "mode") == 0) {
+            printf("%d\n", last_working_mode);
             return 0;
         }
 
-        try {
-            int target_working_mode = std::stoi(mode_arg);
-            
-            if (target_working_mode == static_cast<int>(ksu::Mode::WITH_HOOKS)) {
-                bool is_sus_su_ready;
-                prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::IS_SUS_SU_READY), &is_sus_su_ready, nullptr, &error);
-                if (error || !is_sus_su_ready) {
-                    std::cout << "[-] sus_su mode " << static_cast<int>(ksu::Mode::WITH_HOOKS) 
-                             << " must be run during or after service stage\n";
-                    return 1;
-                }
-                if (last_working_mode == static_cast<int>(ksu::Mode::WITH_HOOKS)) {
-                    std::cout << "[-] sus_su is already in mode " << last_working_mode << '\n';
-                    return 1;
-                }
-                KernelSuManager::enable_sus_su(last_working_mode, static_cast<int>(ksu::Mode::WITH_HOOKS));
-            }
-            else if (target_working_mode == static_cast<int>(ksu::Mode::DISABLED)) {
-                if (last_working_mode == static_cast<int>(ksu::Mode::DISABLED)) {
-                    std::cout << "[-] sus_su is already in mode " << last_working_mode << '\n';
-                    return 1;
-                }
-                KernelSuManager::enable_sus_su(last_working_mode, static_cast<int>(ksu::Mode::DISABLED));
-            }
-            else {
-                std::cerr << "Invalid mode: " << target_working_mode << '\n';
+        char* endptr;
+        int target_working_mode = strtol(argv[2], &endptr, 10);
+        if (*endptr != '\0') {
+            fprintf(stderr, "Invalid argument: %s\n", argv[2]);
+            return 1;
+        }
+
+        if (target_working_mode == static_cast<int>(ksu::Mode::WITH_HOOKS)) {
+            bool is_sus_su_ready;
+            prctl(ksu::OPTIONS, static_cast<int>(ksu::Command::IS_SUS_SU_READY), &is_sus_su_ready, nullptr, &error);
+            if (error || !is_sus_su_ready) {
+                printf("[-] sus_su mode %d must be run during or after service stage\n", 
+                       static_cast<int>(ksu::Mode::WITH_HOOKS));
                 return 1;
             }
+            if (last_working_mode == static_cast<int>(ksu::Mode::WITH_HOOKS)) {
+                printf("[-] sus_su is already in mode %d\n", last_working_mode);
+                return 1;
+            }
+            KernelSuManager::enable_sus_su(last_working_mode, static_cast<int>(ksu::Mode::WITH_HOOKS));
         }
-        catch (const std::exception& e) {
-            std::cerr << "Invalid argument: " << mode_arg << '\n';
+        else if (target_working_mode == static_cast<int>(ksu::Mode::DISABLED)) {
+            if (last_working_mode == static_cast<int>(ksu::Mode::DISABLED)) {
+                printf("[-] sus_su is already in mode %d\n", last_working_mode);
+                return 1;
+            }
+            KernelSuManager::enable_sus_su(last_working_mode, static_cast<int>(ksu::Mode::DISABLED));
+        }
+        else {
+            fprintf(stderr, "Invalid mode: %d\n", target_working_mode);
             return 1;
         }
     }
     else {
-        std::cerr << "Invalid argument: " << command << '\n';
+        fprintf(stderr, "Invalid argument: %s\n", argv[1]);
         return 1;
     }
 
