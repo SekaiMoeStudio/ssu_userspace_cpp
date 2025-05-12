@@ -17,12 +17,12 @@ jobs:
       - name: Build kpmmgr
         run: |
           cd su
-          V=1 VERBOSE=1 make -f $ANDROID_NDK_HOME/ndk-build
+          $ANDROID_NDK_HOME/ndk-build -B V=1 NDK_DEBUG=0 NDK_LOG=1
           cd ..
           cd kpmmgr
-          V=1 VERBOSE=1 make -f $ANDROID_NDK_HOME/ndk-build
+          $ANDROID_NDK_HOME/ndk-build -B V=1 NDK_DEBUG=0 NDK_LOG=1
           cd ..
           cd susfs
-          V=1 VERBOSE=1 make -f $ANDROID_NDK_HOME/ndk-build
+          $ANDROID_NDK_HOME/ndk-build -B V=1 NDK_DEBUG=0 NDK_LOG=1
           cd ..
           tree
