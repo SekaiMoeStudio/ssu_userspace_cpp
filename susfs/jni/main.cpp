@@ -2,6 +2,7 @@
 #include <sys/prctl.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 namespace ksu {
     enum : uint32_t {
